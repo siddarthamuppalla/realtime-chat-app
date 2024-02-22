@@ -1,34 +1,39 @@
-const passport = require('passport');
-const User = require('../models/user');
-const bcrypt = require('bcrypt');
-const LocalStrategy = require('passport-local').Strategy;
+const passport = require("passport");
+const User = require("../models/user");
+const bcrypt = require("bcrypt");
+const LocalStrategy = require("passport-local").Strategy;
+
+const customFields = {
+    usernameField: "email",
+    passwordField: "password",
+};
 
 // initialize new strategy
-const verifyCallback = async (username, password, done) => {
-
+const verifyCallback = async (email, password, done) => {
     try {
-
         // fetch user
-        const fetchedUser = await User.findOne({ username });
+        const fetchedUser = await User.findOne({ email });
 
         // validations
         if (!fetchedUser)
-            done(null, false, { message: "Error fetching user." });
+            return done(null, false, { message: "User does not exist." });
 
         if (fetchedUser) {
-          const isValid = await bcrypt.compareSync(password, fetchedUser.password);
-            if(!isValid)
-                done(null, null, { message: "Password incorrect." });
-            if (isValid)
-                done(null, fetchedUser, { message: "User Authenticated." });
-        };
+            const isValid = await bcrypt.compare(
+                password,
+                fetchedUser.password
+            );
 
+            if (!isValid) return done(null, null);
+
+            if (isValid) return done(null, fetchedUser);
+        }
     } catch (error) {
-        done(error, false, {message: "Internal Server Error"});
-    };
-}
+        return done(error, false, { message: "Internal Server Error" });
+    }
+};
 
-strategy = new LocalStrategy(verifyCallback);
+strategy = new LocalStrategy(customFields, verifyCallback);
 
 passport.use(strategy);
 
@@ -38,8 +43,11 @@ passport.serializeUser((user, done) => {
 });
 
 // deserialize user
-passport.deserializeUser( async (id, done) => {
-    await User.findById(id, (err, user) => {
-        done(err, user)
-    })
-})
+passport.deserializeUser(async (id, done) => {
+    try {
+        const user = await User.findById(id);
+        done(null, user);
+    } catch (error) {
+        done(error, null);
+    }
+});
